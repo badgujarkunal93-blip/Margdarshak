@@ -8,7 +8,6 @@ import {
   BookOpenCheck,
   Check,
   ChevronRight,
-  Clipboard,
   ClipboardList,
   FileSearch,
   GraduationCap,
@@ -27,8 +26,9 @@ import {
   X,
 } from 'lucide-react'
 import heroImage from './assets/hero-counselling.png'
+import paymentQr from './assets/payment-qr.png'
 
-type MembershipTier = 'Explorer' | 'Guide' | 'Group'
+type MembershipTier = 'Explorer' | 'Guide'
 type Category = 'General' | 'OBC' | 'SC' | 'ST' | 'VJ' | 'NT1' | 'NT2' | 'NT3' | 'EWS'
 
 type RegistrationForm = {
@@ -108,7 +108,18 @@ const districts = [
   'Yavatmal',
 ]
 
-const tiers = [
+const tiers: Array<{
+  name: MembershipTier
+  badge: string
+  price: string
+  priceNote?: string
+  summary: string
+  perks: string[]
+  lockedPerks?: string[]
+  cta: string
+  footerNote?: string
+  highlighted?: boolean
+}> = [
   {
     name: 'Explorer',
     badge: 'Explorer',
@@ -130,7 +141,7 @@ const tiers = [
   {
     name: 'Guide',
     badge: 'Most popular',
-    price: '₹399',
+    price: '₹299',
     summary: 'Expert hand-holding for CAP',
     perks: [
       'Everything in Explorer',
@@ -142,34 +153,7 @@ const tiers = [
     cta: 'Get Guide',
     highlighted: true,
   },
-  {
-    name: 'Group',
-    badge: 'Group - 3 friends',
-    price: '₹299 / student',
-    priceNote: '₹897 total · save ₹300 vs 3x Guide',
-    summary: '',
-    perks: [
-      'Everything in Guide for all members',
-      'Separate profile for every student',
-      'Personal CAP list for each member',
-      'Min 3 and max 5 students',
-      'One group invite code',
-    ],
-    cta: 'Get Group plan',
-    footerNote: 'Min 3 students · max 5 students',
-  },
-] satisfies Array<{
-  name: MembershipTier
-  badge: string
-  price: string
-  priceNote?: string
-  summary: string
-  perks: string[]
-  lockedPerks?: string[]
-  cta: string
-  footerNote?: string
-  highlighted?: boolean
-}>
+]
 
 const features = [
   {
@@ -227,11 +211,6 @@ const testimonials = [
   },
 ]
 
-function generateInviteCode() {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  return Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('')
-}
-
 function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [form, setForm] = useState<RegistrationForm>(initialForm)
@@ -265,10 +244,9 @@ function LandingPage() {
 
     try {
       const rank = Number.parseInt(form.rank, 10)
-      const inviteCode = form.membership_tier === 'Group' ? generateInviteCode() : undefined
       const { supabase } = await import('./lib/supabaseClient')
 
-      const { data, error: signUpError } = await supabase.auth.signUp({
+      const { error: signUpError } = await supabase.auth.signUp({
         email: form.email.trim(),
         password: form.password,
         options: {
@@ -288,25 +266,11 @@ function LandingPage() {
         throw signUpError
       }
 
-      if (form.membership_tier === 'Group' && inviteCode && data.user) {
-        const { error: inviteError } = await supabase.from('group_invites').insert({
-          invite_code: inviteCode,
-          created_by_student_id: data.user.id,
-          max_members: 5,
-          current_members: 1,
-        })
-
-        if (inviteError) {
-          throw inviteError
-        }
-      }
-
       navigate('/success', {
         state: {
           name: form.name.trim(),
           email: form.email.trim(),
           membership_tier: form.membership_tier,
-          invite_code: inviteCode,
         } satisfies SuccessState,
       })
     } catch (caughtError) {
@@ -547,7 +511,7 @@ function LandingPage() {
                   <div>
                     <p className="font-bold text-[#185FA5]">Selected tier: {selectedTier.name} {selectedTier.price}</p>
                     <p className="mt-1 text-sm leading-6 text-slate-600">
-                      {selectedTier.summary || 'Group access for friends preparing for CAP together.'}
+                      {selectedTier.summary || 'Expert guidance for your CAP process.'}
                     </p>
                   </div>
                 </div>
@@ -736,17 +700,8 @@ function LandingPage() {
 function SuccessPage() {
   const location = useLocation()
   const details = location.state as SuccessState | null
-  const [copied, setCopied] = useState(false)
 
-  const copyInviteCode = async () => {
-    if (!details?.invite_code) return
-    await navigator.clipboard.writeText(details.invite_code)
-    setCopied(true)
-  }
-
-  const amount = details?.membership_tier === 'Explorer' ? 199 : details?.membership_tier === 'Group' ? 897 : 399
-  const upiLink = `upi://pay?pa=margdarshakcontact@okaxis&pn=Margdarshak&am=${amount}&tn=Payment%20for%20${details?.membership_tier || 'Guide'}%20membership%20${details?.email || ''}`
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(upiLink)}`
+  const amount = details?.membership_tier === 'Explorer' ? 199 : 299
 
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-10">
@@ -770,7 +725,7 @@ function SuccessPage() {
             <div className="flex flex-col items-center justify-center rounded-md border border-orange-200 bg-orange-50/40 p-4 text-center">
               <p className="text-xs font-black uppercase tracking-[0.16em] text-orange-700 mb-3">UPI QR Code</p>
               <img
-                src={qrUrl}
+                src={paymentQr}
                 alt="UPI Payment QR Code"
                 className="size-[160px] rounded-md border border-slate-200 shadow-md bg-white p-2"
               />
@@ -784,28 +739,6 @@ function SuccessPage() {
           />
         )}
 
-        {details?.invite_code ? (
-          <div className="mt-6 rounded-md border border-orange-200 bg-orange-50 p-5">
-            <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Group invite code</p>
-            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <span className="rounded-md bg-white px-4 py-3 font-mono text-2xl font-black tracking-[0.2em] text-blue-950">
-                {details.invite_code}
-              </span>
-              <button
-                type="button"
-                onClick={copyInviteCode}
-                className="inline-flex items-center justify-center gap-2 rounded-md bg-blue-950 px-4 py-3 text-sm font-bold text-white hover:bg-blue-900"
-              >
-                <Clipboard className="size-4" aria-hidden="true" />
-                {copied ? 'Copied' : 'Copy code'}
-              </button>
-            </div>
-            <p className="mt-3 text-sm font-semibold leading-6 text-orange-900">
-              Share this code with your friends so they can join your Group plan. Minimum 3 students and maximum 5 students.
-            </p>
-          </div>
-        ) : null}
-
         <div className="mt-6 rounded-md border border-orange-200 bg-orange-50 p-5">
           <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Next Steps</p>
           <div className="mt-3 text-sm font-semibold leading-6 text-orange-900 space-y-2">
@@ -817,7 +750,7 @@ function SuccessPage() {
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <a
-            href="http://localhost:5174"
+            href={import.meta.env.VITE_KHOJ_PORTAL_URL || 'https://khoj.margdarshak.in'}
             className="inline-flex items-center justify-center rounded-md bg-blue-950 px-5 py-3.5 text-sm font-bold text-white hover:bg-blue-900 shadow-sm"
           >
             Open Margdarshak Khoj

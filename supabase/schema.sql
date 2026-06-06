@@ -8,7 +8,7 @@ create table if not exists public.students (
   rank integer not null check (rank > 0),
   category text default null,
   region text default null,
-  membership_tier text not null check (membership_tier in ('Explorer', 'Guide', 'Group')),
+  membership_tier text not null check (membership_tier in ('Explorer', 'Guide')),
   created_at timestamptz not null default now()
 );
 
