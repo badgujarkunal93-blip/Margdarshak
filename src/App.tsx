@@ -8,10 +8,14 @@ import {
   BookOpenCheck,
   Check,
   ChevronRight,
+  Clipboard,
   ClipboardList,
+  FileSearch,
   GraduationCap,
   Layers3,
+  LoaderCircle,
   LockKeyhole,
+  Mail,
   MapPin,
   Menu,
   PhoneCall,
@@ -23,9 +27,9 @@ import {
   X,
 } from 'lucide-react'
 import heroImage from './assets/hero-counselling.png'
-import { isSupabaseConfigured, supabase } from './lib/supabase'
 
 type MembershipTier = 'Explorer' | 'Guide' | 'Group'
+type Category = 'General' | 'OBC' | 'SC' | 'ST' | 'VJ' | 'NT1' | 'NT2' | 'NT3' | 'EWS'
 
 type RegistrationForm = {
   name: string
@@ -34,14 +38,25 @@ type RegistrationForm = {
   rank: string
   password: string
   membership_tier: MembershipTier
+  category: Category
+  district: string
 }
 
 type SuccessState = {
   name: string
   email: string
-  password: string
   membership_tier: MembershipTier
+  invite_code?: string
 }
+
+type ToastState = {
+  message: string
+  tone: 'error'
+}
+
+const isSupabaseConfigured = Boolean(
+  import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY,
+)
 
 const initialForm: RegistrationForm = {
   name: '',
@@ -50,7 +65,48 @@ const initialForm: RegistrationForm = {
   rank: '',
   password: '',
   membership_tier: 'Guide',
+  category: 'General',
+  district: '',
 }
+
+const categories: Category[] = ['General', 'OBC', 'SC', 'ST', 'VJ', 'NT1', 'NT2', 'NT3', 'EWS']
+
+const districts = [
+  'Ahmednagar',
+  'Akola',
+  'Amravati',
+  'Aurangabad',
+  'Beed',
+  'Bhandara',
+  'Buldhana',
+  'Chandrapur',
+  'Dhule',
+  'Gadchiroli',
+  'Gondia',
+  'Hingoli',
+  'Jalgaon',
+  'Jalna',
+  'Kolhapur',
+  'Latur',
+  'Mumbai',
+  'Nagpur',
+  'Nanded',
+  'Nashik',
+  'Osmanabad',
+  'Palghar',
+  'Parbhani',
+  'Pune',
+  'Raigad',
+  'Ratnagiri',
+  'Sangli',
+  'Satara',
+  'Sindhudurg',
+  'Solapur',
+  'Thane',
+  'Wardha',
+  'Washim',
+  'Yavatmal',
+]
 
 const tiers = [
   {
@@ -59,12 +115,10 @@ const tiers = [
     price: '₹199',
     summary: 'Find the right college yourself',
     perks: [
-      'Full college search + filters',
-      'Branch, fees, district, caste filters',
+      'College search and filters',
       'Detailed college profiles',
-      'Cut-off history (3 years)',
+      'Cut-off history',
       'Save up to 10 colleges',
-      'Photo gallery + reviews',
     ],
     lockedPerks: [
       'AI college recommendations',
@@ -81,11 +135,9 @@ const tiers = [
     perks: [
       'Everything in Explorer',
       'AI college recommendations',
-      'Safe / moderate / reach scoring',
-      'Personal CAP preference list',
-      'Counsellor-reviewed + optimised',
-      'PDF download of final list',
-      'Priority WhatsApp support',
+      'Personal CAP list prepared by counsellor',
+      'PDF download',
+      'WhatsApp support',
     ],
     cta: 'Get Guide',
     highlighted: true,
@@ -97,13 +149,11 @@ const tiers = [
     priceNote: '₹897 total · save ₹300 vs 3x Guide',
     summary: '',
     perks: [
-      'Everything in Guide plan',
-      'All 3 students get full access',
-      'Separate profiles per student',
-      'Individual CAP lists for each',
-      'One payment by any member',
-      'Share invite link to friends',
-      'Priority WhatsApp support',
+      'Everything in Guide for all members',
+      'Separate profile for every student',
+      'Personal CAP list for each member',
+      'Min 3 and max 5 students',
+      'One group invite code',
     ],
     cta: 'Get Group plan',
     footerNote: 'Min 3 students · max 5 students',
@@ -163,16 +213,31 @@ const steps = [
 ]
 
 const testimonials = [
-  'The counselling flow gave me a clear view of which colleges to focus on.',
-  'Having one account for registration and college search made everything simpler.',
-  'The preference planning support helped me avoid random CAP choices.',
+  {
+    quote: 'The counselling flow gave me a clear view of which colleges to focus on.',
+    author: 'Aditya Kulkarni',
+  },
+  {
+    quote: 'Having one account for registration and college search made everything simpler.',
+    author: 'Neha Deshmukh',
+  },
+  {
+    quote: 'The preference planning support helped me avoid random CAP choices.',
+    author: 'Rohan Patil',
+  },
 ]
+
+function generateInviteCode() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  return Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('')
+}
 
 function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [form, setForm] = useState<RegistrationForm>(initialForm)
   const [status, setStatus] = useState<'idle' | 'submitting'>('idle')
   const [error, setError] = useState('')
+  const [toast, setToast] = useState<ToastState | null>(null)
   const navigate = useNavigate()
 
   const selectedTier = useMemo(
@@ -187,9 +252,12 @@ function LandingPage() {
   const registerStudent = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
+    setToast(null)
 
     if (!isSupabaseConfigured) {
-      setError('Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env before registering students.')
+      const message = 'Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env before registering students.'
+      setError(message)
+      setToast({ message, tone: 'error' })
       return
     }
 
@@ -197,6 +265,8 @@ function LandingPage() {
 
     try {
       const rank = Number.parseInt(form.rank, 10)
+      const inviteCode = form.membership_tier === 'Group' ? generateInviteCode() : undefined
+      const { supabase } = await import('./lib/supabaseClient')
 
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: form.email.trim(),
@@ -206,8 +276,9 @@ function LandingPage() {
             name: form.name.trim(),
             phone: form.phone.trim(),
             rank,
-            category: null,
-            region: null,
+            category: form.category,
+            district: form.district,
+            region: form.district,
             membership_tier: form.membership_tier,
           },
         },
@@ -217,23 +288,16 @@ function LandingPage() {
         throw signUpError
       }
 
-      if (data.session && data.user) {
-        const { error: profileError } = await supabase.from('students').upsert(
-          {
-            id: data.user.id,
-            name: form.name.trim(),
-            email: form.email.trim(),
-            phone: form.phone.trim(),
-            rank,
-            category: null,
-            region: null,
-            membership_tier: form.membership_tier,
-          },
-          { onConflict: 'id' },
-        )
+      if (form.membership_tier === 'Group' && inviteCode && data.user) {
+        const { error: inviteError } = await supabase.from('group_invites').insert({
+          invite_code: inviteCode,
+          created_by_student_id: data.user.id,
+          max_members: 5,
+          current_members: 1,
+        })
 
-        if (profileError) {
-          throw profileError
+        if (inviteError) {
+          throw inviteError
         }
       }
 
@@ -241,13 +305,14 @@ function LandingPage() {
         state: {
           name: form.name.trim(),
           email: form.email.trim(),
-          password: form.password,
           membership_tier: form.membership_tier,
+          invite_code: inviteCode,
         } satisfies SuccessState,
       })
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : 'Registration failed. Please try again.'
       setError(message)
+      setToast({ message, tone: 'error' })
     } finally {
       setStatus('idle')
     }
@@ -255,29 +320,27 @@ function LandingPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
+      <Toast toast={toast} onClose={() => setToast(null)} />
       <header className="sticky top-0 z-40 border-b border-blue-950/10 bg-white/95 backdrop-blur">
         <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 lg:px-8">
           <a href="#top" className="flex items-center gap-3">
-            <span className="grid size-10 place-items-center rounded-md bg-blue-950 text-white">
+            <span className="grid size-10 place-items-center rounded-md bg-[#185FA5] text-white">
               <GraduationCap className="size-6" aria-hidden="true" />
             </span>
-            <span>
-              <span className="block text-base font-bold leading-none text-blue-950">Margdarshak khoj</span>
-              <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-orange-600">MHT-CET</span>
-            </span>
+            <span className="text-lg font-black tracking-wide text-[#185FA5]">Margdarshak</span>
           </a>
 
           <div className="hidden items-center gap-8 text-sm font-semibold text-slate-700 md:flex">
-            <a href="#how" className="transition hover:text-blue-950">How it works</a>
-            <a href="#features" className="transition hover:text-blue-950">Benefits</a>
-            <a href="#pricing" className="transition hover:text-blue-950">Pricing</a>
+            <a href="#how" className="transition hover:text-[#185FA5]">How it works</a>
+            <a href="#features" className="transition hover:text-[#185FA5]">Benefits</a>
+            <a href="#pricing" className="transition hover:text-[#185FA5]">Pricing</a>
             <a href="#register" className="rounded-md bg-orange-500 px-4 py-2.5 text-white shadow-sm transition hover:bg-orange-600">
               Register
             </a>
           </div>
 
           <button
-            className="grid size-10 place-items-center rounded-md border border-slate-200 text-blue-950 md:hidden"
+            className="grid size-10 place-items-center rounded-md border border-slate-200 text-[#185FA5] md:hidden"
             type="button"
             aria-label="Toggle navigation"
             onClick={() => setMobileMenuOpen((open) => !open)}
@@ -308,14 +371,14 @@ function LandingPage() {
                 <Sparkles className="size-4 text-orange-500" aria-hidden="true" />
                 Built for Maharashtra engineering admissions
               </div>
-              <h1 className="max-w-3xl text-4xl font-black leading-[1.05] text-blue-950 sm:text-5xl lg:text-6xl">
-                Margdarshak khoj
+              <h1 className="max-w-3xl text-4xl font-black leading-[1.05] text-[#185FA5] sm:text-5xl lg:text-6xl">
+                Margdarshak
               </h1>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600 sm:text-xl">
                 Register once, explore colleges confidently, and get ready for smarter MHT-CET CAP preference planning.
               </p>
               <div className="mt-6 max-w-2xl rounded-md border-l-4 border-orange-500 bg-blue-50 px-5 py-4 shadow-sm">
-                <p className="text-lg font-black leading-7 text-blue-950">
+                <p className="text-lg font-black leading-7 text-[#185FA5]">
                   Got a strong percentile? We help you turn it into the best college admit possible.
                 </p>
                 <p className="mt-3 font-bold leading-7 text-slate-700">
@@ -334,11 +397,7 @@ function LandingPage() {
                   View pricing <ChevronRight className="size-4" aria-hidden="true" />
                 </a>
               </div>
-              <div className="mt-10 grid max-w-xl grid-cols-3 gap-3 text-center sm:text-left">
-                <Stat value="3" label="Connected apps" />
-                <Stat value="1" label="Supabase login" />
-                <Stat value="CAP" label="Ready workflow" />
-              </div>
+
             </div>
 
             <div className="relative">
@@ -350,7 +409,7 @@ function LandingPage() {
               <div className="absolute bottom-4 left-4 right-4 rounded-md bg-white/95 p-4 shadow-xl backdrop-blur sm:left-auto sm:w-80">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-bold text-blue-950">College Explorer</p>
+                    <p className="text-sm font-bold text-[#185FA5]">College Explorer</p>
                     <p className="mt-1 text-xs font-medium text-slate-500">Shared login ready for App 1</p>
                   </div>
                   <span className="grid size-9 place-items-center rounded-md bg-orange-100 text-orange-600">
@@ -362,7 +421,7 @@ function LandingPage() {
           </div>
         </section>
 
-        <section id="how" className="border-y border-blue-950/10 bg-blue-950 py-16 text-white sm:py-20">
+        <section id="how" className="border-y border-[#185FA5]/10 bg-[#185FA5] py-16 text-white sm:py-20">
           <SectionHeading
             eyebrow="How it works"
             title="A simple path from registration to CAP planning"
@@ -486,8 +545,10 @@ function LandingPage() {
                 <div className="flex gap-3">
                   <BadgeCheck className="mt-1 size-5 shrink-0 text-blue-950" aria-hidden="true" />
                   <div>
-                    <p className="font-bold text-blue-950">Selected tier: {selectedTier.name} {selectedTier.price}</p>
-                    <p className="mt-1 text-sm leading-6 text-slate-600">{selectedTier.summary}</p>
+                    <p className="font-bold text-[#185FA5]">Selected tier: {selectedTier.name} {selectedTier.price}</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">
+                      {selectedTier.summary || 'Group access for friends preparing for CAP together.'}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -566,6 +627,37 @@ function LandingPage() {
                     ))}
                   </select>
                 </Field>
+                <Field label="Category" id="category">
+                  <select
+                    id="category"
+                    required
+                    value={form.category}
+                    onChange={(event) => updateForm('category', event.target.value as Category)}
+                    className="input"
+                  >
+                    {categories.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="District" id="district">
+                  <select
+                    id="district"
+                    required
+                    value={form.district}
+                    onChange={(event) => updateForm('district', event.target.value)}
+                    className="input"
+                  >
+                    <option value="">Select district</option>
+                    {districts.map((district) => (
+                      <option key={district} value={district}>
+                        {district}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
               </div>
 
               {error ? (
@@ -577,36 +669,38 @@ function LandingPage() {
               <button
                 type="submit"
                 disabled={status === 'submitting'}
-                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-md bg-blue-950 px-5 py-4 text-sm font-bold text-white transition hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-70"
+                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#185FA5] px-5 py-4 text-sm font-bold text-white transition hover:bg-[#134f89] disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {status === 'submitting' ? 'Creating account...' : 'Register and continue'}
-                <ArrowRight className="size-4" aria-hidden="true" />
+                {status === 'submitting' ? (
+                  <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                )}
               </button>
-              <p className="mt-4 text-center text-xs leading-5 text-slate-500">
-                Passwords are handled by Supabase Auth. The public students table stores profile and membership data only.
-              </p>
+
             </form>
           </div>
         </section>
 
         <section className="border-y border-blue-950/10 bg-slate-50 py-16">
-          <SectionHeading eyebrow="Testimonials" title="Student feedback placeholders" />
+          <SectionHeading eyebrow="Testimonials" title="Trusted by students across Maharashtra" />
           <div className="mx-auto mt-10 grid max-w-7xl gap-4 px-5 md:grid-cols-3 lg:px-8">
-            {testimonials.map((quote, index) => (
-              <article key={quote} className="rounded-md border border-slate-200 bg-white p-6 shadow-sm">
+            {testimonials.map((item) => (
+              <article key={item.author} className="rounded-md border border-slate-200 bg-white p-6 shadow-sm">
                 <div className="flex gap-1 text-orange-500" aria-label="5 star rating">
                   {Array.from({ length: 5 }, (_, starIndex) => (
                     <Star key={starIndex} className="size-4 fill-current" aria-hidden="true" />
                   ))}
                 </div>
-                <p className="mt-5 leading-7 text-slate-700">"{quote}"</p>
-                <p className="mt-6 text-sm font-bold text-blue-950">Student placeholder {index + 1}</p>
+                <p className="mt-5 leading-7 text-slate-700">"{item.quote}"</p>
+                <p className="mt-6 text-sm font-bold text-blue-950">{item.author}</p>
               </article>
             ))}
           </div>
         </section>
 
-        <section className="bg-blue-950 px-5 py-14 text-white">
+        <section className="bg-[#185FA5] px-5 py-14 text-white">
           <div className="mx-auto flex max-w-7xl flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-bold uppercase tracking-[0.18em] text-orange-300">Ready for CAP?</p>
@@ -621,10 +715,17 @@ function LandingPage() {
 
       <footer className="bg-white px-5 py-8">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
-          <p className="font-semibold text-blue-950">Margdarshak khoj for MHT-CET Counselling</p>
-          <div className="flex flex-wrap gap-4">
-            <span className="inline-flex items-center gap-2"><PhoneCall className="size-4" /> Counsellor contact</span>
-            <span className="inline-flex items-center gap-2"><MapPin className="size-4" /> Maharashtra admissions</span>
+          <p className="text-base font-black tracking-wide text-[#185FA5]">Margdarshak</p>
+          <div className="flex flex-wrap gap-x-6 gap-y-2">
+            <a href="tel:+917264030382" className="inline-flex items-center gap-2 transition hover:text-[#185FA5]">
+              <PhoneCall className="size-4" /> +91 72640 30382
+            </a>
+            <a href="mailto:margdarshakcontact@gmail.com" className="inline-flex items-center gap-2 transition hover:text-[#185FA5]">
+              <Mail className="size-4" /> margdarshakcontact@gmail.com
+            </a>
+            <span className="inline-flex items-center gap-2 text-slate-500">
+              <MapPin className="size-4" /> Maharashtra admissions
+            </span>
           </div>
         </div>
       </footer>
@@ -635,6 +736,17 @@ function LandingPage() {
 function SuccessPage() {
   const location = useLocation()
   const details = location.state as SuccessState | null
+  const [copied, setCopied] = useState(false)
+
+  const copyInviteCode = async () => {
+    if (!details?.invite_code) return
+    await navigator.clipboard.writeText(details.invite_code)
+    setCopied(true)
+  }
+
+  const amount = details?.membership_tier === 'Explorer' ? 199 : details?.membership_tier === 'Group' ? 897 : 399
+  const upiLink = `upi://pay?pa=margdarshakcontact@okaxis&pn=Margdarshak&am=${amount}&tn=Payment%20for%20${details?.membership_tier || 'Guide'}%20membership%20${details?.email || ''}`
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(upiLink)}`
 
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-10">
@@ -644,29 +756,75 @@ function SuccessPage() {
         </div>
         <h1 className="mt-6 text-3xl font-black text-blue-950 sm:text-4xl">Registration successful</h1>
         <p className="mt-4 leading-8 text-slate-600">
-          The student can use these login details for App 1 when College Explorer is connected to the same Supabase project.
+          Your Margdarshak account is ready. Complete the payment below to activate your account.
         </p>
 
         {details ? (
-          <div className="mt-8 grid gap-4 rounded-md border border-blue-100 bg-blue-50 p-5">
-            <Credential label="Name" value={details.name} />
-            <Credential label="Email / App 1 login" value={details.email} />
-            <Credential label="Password" value={details.password} secret />
-            <Credential label="Membership" value={details.membership_tier} />
+          <div className="mt-8 grid gap-6 md:grid-cols-[1fr_240px] items-start">
+            <div className="grid gap-4 rounded-md border border-blue-100 bg-blue-50 p-5">
+              <Credential label="Name" value={details.name} />
+              <Credential label="Email" value={details.email} />
+              <Credential label="Selected plan" value={details.membership_tier} />
+              <Credential label="Payment Amount" value={`₹${amount}`} />
+            </div>
+            <div className="flex flex-col items-center justify-center rounded-md border border-orange-200 bg-orange-50/40 p-4 text-center">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-orange-700 mb-3">UPI QR Code</p>
+              <img
+                src={qrUrl}
+                alt="UPI Payment QR Code"
+                className="size-[160px] rounded-md border border-slate-200 shadow-md bg-white p-2"
+              />
+              <p className="mt-3 text-xs font-bold text-slate-700">Scan to pay ₹{amount}</p>
+            </div>
           </div>
         ) : (
-          <div className="mt-8 rounded-md border border-orange-200 bg-orange-50 p-5 text-sm font-semibold text-orange-800">
-            Login details are shown immediately after registration. Return to the landing page to register another student.
-          </div>
+          <EmptyState
+            title="No registration details to show"
+            message="Registration details are shown immediately after signup. Return to the landing page to register another student."
+          />
         )}
 
+        {details?.invite_code ? (
+          <div className="mt-6 rounded-md border border-orange-200 bg-orange-50 p-5">
+            <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Group invite code</p>
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <span className="rounded-md bg-white px-4 py-3 font-mono text-2xl font-black tracking-[0.2em] text-blue-950">
+                {details.invite_code}
+              </span>
+              <button
+                type="button"
+                onClick={copyInviteCode}
+                className="inline-flex items-center justify-center gap-2 rounded-md bg-blue-950 px-4 py-3 text-sm font-bold text-white hover:bg-blue-900"
+              >
+                <Clipboard className="size-4" aria-hidden="true" />
+                {copied ? 'Copied' : 'Copy code'}
+              </button>
+            </div>
+            <p className="mt-3 text-sm font-semibold leading-6 text-orange-900">
+              Share this code with your friends so they can join your Group plan. Minimum 3 students and maximum 5 students.
+            </p>
+          </div>
+        ) : null}
+
+        <div className="mt-6 rounded-md border border-orange-200 bg-orange-50 p-5">
+          <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Next Steps</p>
+          <div className="mt-3 text-sm font-semibold leading-6 text-orange-900 space-y-2">
+            <p>1. Scan the QR code above or pay directly to UPI ID: <strong className="font-mono bg-white px-1.5 py-0.5 rounded border border-orange-200">margdarshakcontact@okaxis</strong></p>
+            <p>2. Send a screenshot of the payment receipt via WhatsApp to <a href="https://wa.me/917264030382" target="_blank" rel="noreferrer" className="underline font-bold text-blue-950">+91 72640 30382</a></p>
+            <p>3. Once the admin confirms your payment receipt, your credentials will be unlocked and you can access Margdarshak Khoj.</p>
+          </div>
+        </div>
+
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <Link to="/" className="inline-flex items-center justify-center rounded-md bg-blue-950 px-5 py-3 text-sm font-bold text-white hover:bg-blue-900">
-            Back to landing page
-          </Link>
-          <a href="/" className="inline-flex items-center justify-center rounded-md border border-blue-950/15 bg-white px-5 py-3 text-sm font-bold text-blue-950 hover:border-blue-950/30">
-            Register another student
+          <a
+            href="http://localhost:5174"
+            className="inline-flex items-center justify-center rounded-md bg-blue-950 px-5 py-3.5 text-sm font-bold text-white hover:bg-blue-900 shadow-sm"
+          >
+            Open Margdarshak Khoj
           </a>
+          <Link to="/" className="inline-flex items-center justify-center rounded-md border border-blue-950/15 bg-white px-5 py-3.5 text-sm font-bold text-blue-950 hover:border-blue-950/30">
+            Register another student
+          </Link>
         </div>
       </div>
     </main>
@@ -691,7 +849,7 @@ function SectionHeading({
       <p className={`text-sm font-bold uppercase tracking-[0.18em] ${isDark ? 'text-orange-300' : 'text-orange-600'}`}>
         {eyebrow}
       </p>
-      <h2 className={`mt-3 text-3xl font-black leading-tight sm:text-4xl ${isDark ? 'text-white' : 'text-blue-950'}`}>
+      <h2 className={`mt-3 text-3xl font-black leading-tight sm:text-4xl ${isDark ? 'text-white' : 'text-[#185FA5]'}`}>
         {title}
       </h2>
       {text ? <p className={`mt-4 leading-8 ${isDark ? 'text-blue-100' : 'text-slate-600'}`}>{text}</p> : null}
@@ -701,29 +859,67 @@ function SectionHeading({
 
 function Field({ label, id, children }: { label: string; id: string; children: ReactNode }) {
   return (
-    <label htmlFor={id} className="grid gap-2 text-sm font-bold text-blue-950">
+    <label htmlFor={id} className="grid gap-2 text-sm font-bold text-[#185FA5]">
       {label}
       {children}
     </label>
   )
 }
 
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="rounded-md border border-blue-100 bg-blue-50 px-4 py-3">
-      <p className="text-xl font-black text-blue-950">{value}</p>
-      <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">{label}</p>
-    </div>
-  )
-}
+
 
 function Credential({ label, value, secret }: { label: string; value: string; secret?: boolean }) {
   return (
     <div className="grid gap-1 sm:grid-cols-[180px_1fr] sm:items-center">
-      <span className="text-sm font-bold text-blue-950">{label}</span>
+      <span className="text-sm font-bold text-[#185FA5]">{label}</span>
       <span className="rounded-md bg-white px-3 py-2 font-mono text-sm text-slate-700">
         {secret ? value : value}
       </span>
+    </div>
+  )
+}
+
+function Toast({ toast, onClose }: { toast: ToastState | null; onClose: () => void }) {
+  if (!toast) return null
+
+  return (
+    <div
+      className="fixed right-4 top-4 z-50 w-[calc(100%-2rem)] max-w-sm rounded-md border border-red-200 bg-white p-4 shadow-2xl shadow-slate-950/10"
+      role="alert"
+    >
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-md bg-red-50 text-red-600">
+          <X className="size-4" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-red-700">Supabase error</p>
+          <p className="mt-1 text-sm font-semibold leading-6 text-slate-700">{toast.message}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="grid size-8 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-slate-100"
+          aria-label="Close notification"
+        >
+          <X className="size-4" aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function EmptyState({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="mt-8 rounded-md border border-orange-200 bg-orange-50 p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <span className="grid size-12 shrink-0 place-items-center rounded-md bg-white text-orange-600">
+          <FileSearch className="size-6" aria-hidden="true" />
+        </span>
+        <div>
+          <p className="font-black text-orange-900">{title}</p>
+          <p className="mt-1 text-sm font-semibold leading-6 text-orange-800">{message}</p>
+        </div>
+      </div>
     </div>
   )
 }
