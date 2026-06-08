@@ -742,7 +742,7 @@ function SuccessPage() {
         <div className="mt-6 rounded-md border border-orange-200 bg-orange-50 p-5">
           <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Next Steps</p>
           <div className="mt-3 text-sm font-semibold leading-6 text-orange-900 space-y-2">
-            <p>1. Scan the QR code above or pay directly to UPI ID: <strong className="font-mono bg-white px-1.5 py-0.5 rounded border border-orange-200">margdarshakcontact@okaxis</strong></p>
+            <p>1. Scan the QR code above or pay directly to UPI ID: <strong className="font-mono bg-white px-1.5 py-0.5 rounded border border-orange-200">omkarjadhawar9@okaxis</strong></p>
             <p>2. Send a screenshot of the payment receipt via WhatsApp to <a href="https://wa.me/917264030382" target="_blank" rel="noreferrer" className="underline font-bold text-blue-950">+91 72640 30382</a></p>
             <p>3. Once the admin confirms your payment receipt, your credentials will be unlocked and you can access Margdarshak Khoj.</p>
           </div>
